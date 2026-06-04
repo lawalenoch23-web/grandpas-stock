@@ -9,12 +9,17 @@ interface SupplyLineItem {
   pricePerUnit: string
 }
 
+type FilterPeriod = 'all' | 'today' | 'week' | 'month'
+
 export default function ManagerSupply() {
   const { appState, setAppState } = useAppState()
   const [showForm, setShowForm] = useState(false)
   const [supplierName, setSupplierName] = useState('')
+  const [invoiceNo, setInvoiceNo] = useState('')
   const [items, setItems] = useState<SupplyLineItem[]>([{ productId: '', qty: 1, pricePerUnit: '' }])
   const [success, setSuccess] = useState(false)
+  const [search, setSearch] = useState('')
+  const [filter, setFilter] = useState<FilterPeriod>('all')
 
   const addItem = () => setItems([...items, { productId: '', qty: 1, pricePerUnit: '' }])
   const removeItem = (i: number) => setItems(items.filter((_, idx) => idx !== i))
@@ -45,7 +50,6 @@ export default function ManagerSupply() {
       }
     })
 
-    // Update product stock
     const updatedProducts = appState.products.map(p => {
       const item = validItems.find(it => parseInt(it.productId) === p.id)
       if (item) return { ...p, current_stock: p.current_stock + item.qty }
@@ -57,6 +61,7 @@ export default function ManagerSupply() {
       products: updatedProducts,
       supplies: [...prev.supplies, {
         id: Date.now(),
+        invoice_no: invoiceNo.trim() || `INV-${Date.now().toString().slice(-6)}`,
         supplier_name: supplierName,
         items: supplyItems,
         total_cost: totalCost,
@@ -65,15 +70,29 @@ export default function ManagerSupply() {
       }],
     }))
 
-    setSupplierName(''); setItems([{ productId: '', qty: 1, pricePerUnit: '' }])
+    setSupplierName(''); setInvoiceNo(''); setItems([{ productId: '', qty: 1, pricePerUnit: '' }])
     setSuccess(true); setShowForm(false)
     setTimeout(() => setSuccess(false), 3000)
   }
 
-  const supplies = [...appState.supplies].reverse()
-  const todayTotal = appState.supplies
-    .filter(s => s.date === today())
-    .reduce((sum, s) => sum + s.total_cost, 0)
+  const filterStart = () => {
+    const now = new Date()
+    if (filter === 'today') return today()
+    if (filter === 'week') { const d = new Date(now); d.setDate(d.getDate() - 7); return d.toISOString().split('T')[0] }
+    if (filter === 'month') { const d = new Date(now); d.setDate(d.getDate() - 30); return d.toISOString().split('T')[0] }
+    return '2000-01-01'
+  }
+
+  const filtered = [...appState.supplies]
+    .filter(s => s.date >= filterStart())
+    .filter(s =>
+      search === '' ||
+      s.invoice_no.toLowerCase().includes(search.toLowerCase()) ||
+      s.supplier_name.toLowerCase().includes(search.toLowerCase())
+    )
+    .reverse()
+
+  const todayTotal = appState.supplies.filter(s => s.date === today()).reduce((sum, s) => sum + s.total_cost, 0)
 
   return (
     <div className="max-w-2xl">
@@ -95,14 +114,35 @@ export default function ManagerSupply() {
         </div>
       )}
 
-      {supplies.length === 0
-        ? <EmptyState icon="🚚" text="No supply purchases recorded yet" />
-        : supplies.map(s => (
+      {/* Search + Filter */}
+      <div className="flex gap-3 mb-5">
+        <Input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by invoice no. or supplier..."
+          className="flex-1"
+        />
+        <div className="flex gap-1.5">
+          {(['all', 'today', 'week', 'month'] as FilterPeriod[]).map(f => (
+            <button key={f} onClick={() => setFilter(f)}
+              className={`px-3 py-2 rounded-lg text-xs font-mono uppercase border cursor-pointer transition-all
+                ${filter === f ? 'bg-accent/10 border-accent/30 text-accent' : 'border-border text-muted hover:border-soft'}`}
+            >{f}</button>
+          ))}
+        </div>
+      </div>
+
+      {filtered.length === 0
+        ? <EmptyState icon="🚚" text="No supply purchases found" />
+        : filtered.map(s => (
           <Card key={s.id} className="mb-4">
             <div className="flex justify-between items-start mb-3">
               <div>
                 <div className="font-display font-semibold">{s.supplier_name}</div>
-                <div className="text-xs text-muted font-mono mt-0.5">{s.date}</div>
+                <div className="flex gap-3 mt-1">
+                  <span className="text-xs text-muted font-mono">{s.date}</span>
+                  <span className="text-xs text-accent font-mono">#{s.invoice_no}</span>
+                </div>
               </div>
               <Tag color="yellow">{fmt(s.total_cost)}</Tag>
             </div>
@@ -131,9 +171,14 @@ export default function ManagerSupply() {
 
       {showForm && (
         <Modal title="Record Supply Purchase" onClose={() => setShowForm(false)} width="max-w-2xl">
-          <Field label="SUPPLIER NAME *">
-            <Input value={supplierName} onChange={e => setSupplierName(e.target.value)} placeholder="e.g. Coca Cola Distributor" />
-          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="SUPPLIER NAME *">
+              <Input value={supplierName} onChange={e => setSupplierName(e.target.value)} placeholder="e.g. Coca Cola Distributor" />
+            </Field>
+            <Field label="INVOICE NUMBER">
+              <Input value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)} placeholder="e.g. INV-00123" />
+            </Field>
+          </div>
 
           <Divider />
 
@@ -155,11 +200,10 @@ export default function ManagerSupply() {
               <Field label={i === 0 ? 'QTY' : ''} className="mb-0">
                 <Input type="number" min={1} value={item.qty} onChange={e => updateItem(i, 'qty', parseInt(e.target.value))} />
               </Field>
-              <Field label={i === 0 ? 'PRICE PER UNIT (₦)' : ''} className="mb-0">
+              <Field label={i === 0 ? 'PRICE/UNIT (₦)' : ''} className="mb-0">
                 <Input type="number" value={item.pricePerUnit} onChange={e => updateItem(i, 'pricePerUnit', e.target.value)} placeholder="0" />
               </Field>
-              <button
-                onClick={() => removeItem(i)}
+              <button onClick={() => removeItem(i)}
                 className="bg-red/10 border-none text-red w-9 h-10 rounded-lg text-base cursor-pointer hover:bg-red/20 self-end"
               >×</button>
             </div>
