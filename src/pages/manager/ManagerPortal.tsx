@@ -5,9 +5,13 @@ import ManagerReports from './ManagerReports'
 import ManagerSales from './ManagerSales'
 import OutstandingBalances from './OutstandingBalances'
 import ManagerExpenses from './ManagerExpenses'
+import ManagerSupply from './ManagerSupply'
+import ManagerFinancials from './ManagerFinancials'
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: '📊' },
+  { id: 'financials', label: 'Financials', icon: '💹' },
+  { id: 'supply', label: 'Supply', icon: '🚚' },
   { id: 'reports', label: 'Daily Reports', icon: '📋' },
   { id: 'sales', label: 'All Sales', icon: '💰' },
   { id: 'outstanding', label: 'Outstanding', icon: '⏳' },
@@ -26,11 +30,13 @@ export default function ManagerPortal({ onLogout }: ManagerPortalProps) {
       <TopBar role="manager" onLogout={onLogout} />
       <TabBar tabs={TABS} active={tab} onChange={setTab} accentColor="text-yellow border-yellow" />
       <div className="flex-1 p-6 overflow-y-auto">
-        {tab === 'overview' && <ManagerOverview />}
-        {tab === 'reports' && <ManagerReports />}
-        {tab === 'sales' && <ManagerSales />}
+        {tab === 'overview'    && <ManagerOverview />}
+        {tab === 'financials'  && <ManagerFinancials />}
+        {tab === 'supply'      && <ManagerSupply />}
+        {tab === 'reports'     && <ManagerReports />}
+        {tab === 'sales'       && <ManagerSales />}
         {tab === 'outstanding' && <OutstandingBalances />}
-        {tab === 'expenses' && <ManagerExpenses />}
+        {tab === 'expenses'    && <ManagerExpenses />}
       </div>
     </div>
   )
