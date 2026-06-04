@@ -26,6 +26,7 @@ export default function SaleForm() {
   const [newCustomCategory, setNewCustomCategory] = useState('')
   const [newUnit, setNewUnit] = useState('Crate')
   const [newMinStock, setNewMinStock] = useState('5')
+  const [newPrice, setNewPrice] = useState('')
 
   const categories = ['Soda', 'Water', 'Juice', 'Energy', 'Beer', 'Wine', 'Spirit', 'Other',
     ...Array.from(new Set(appState.products.map(p => p.category)))
@@ -33,9 +34,17 @@ export default function SaleForm() {
 
   const addItem = () => setItems([...items, { productId: '', qty: 1, price: '' }])
   const removeItem = (i: number) => setItems(items.filter((_, idx) => idx !== i))
+
   const updateItem = (i: number, field: keyof SaleLineItem, val: string | number) => {
     const updated = [...items]
     updated[i] = { ...updated[i], [field]: val }
+    // Auto-fill price from product's fixed retail_price when product is selected
+    if (field === 'productId') {
+      const prod = appState.products.find(p => p.id === parseInt(val as string))
+      if (prod && prod.retail_price > 0) {
+        updated[i].price = prod.retail_price.toString()
+      }
+    }
     setItems(updated)
   }
 
@@ -57,14 +66,15 @@ export default function SaleForm() {
       units_per_crate: 12,
       cost_price: 0,
       wholesale_price: 0,
-      retail_price: 0,
+      retail_price: parseFloat(newPrice) || 0,
       current_stock: 0,
       minimum_stock: parseInt(newMinStock) || 5,
       is_active: true,
       created_at: new Date().toISOString(),
     }
     setAppState(prev => ({ ...prev, products: [...prev.products, newProduct] }))
-    setNewName(''); setNewCategory(''); setNewCustomCategory(''); setNewUnit('Crate'); setNewMinStock('5')
+    setNewName(''); setNewCategory(''); setNewCustomCategory('')
+    setNewUnit('Crate'); setNewMinStock('5'); setNewPrice('')
     setShowAddProduct(false)
   }
 
@@ -169,7 +179,7 @@ export default function SaleForm() {
         </div>
 
         {items.map((item, i) => (
-          <div key={i} className="grid gap-2.5 mb-2.5 items-end" style={{ gridTemplateColumns: '1fr 80px 120px 36px' }}>
+          <div key={i} className="grid gap-2.5 mb-2.5 items-end" style={{ gridTemplateColumns: '1fr 80px 140px 36px' }}>
             <Field label={i === 0 ? 'PRODUCT' : ''} className="mb-0">
               <Select value={item.productId} onChange={e => updateItem(i, 'productId', e.target.value)}>
                 <option value="">Select product</option>
@@ -179,13 +189,18 @@ export default function SaleForm() {
               </Select>
             </Field>
             <Field label={i === 0 ? 'QTY' : ''} className="mb-0">
-              <Input type="number" min={1} value={item.qty} onChange={e => updateItem(i, 'qty', parseInt(e.target.value))} />
+              <Input type="number" min={1} value={item.qty}
+                onChange={e => updateItem(i, 'qty', parseInt(e.target.value))} />
             </Field>
-            <Field label={i === 0 ? 'UNIT PRICE (₦)' : ''} className="mb-0">
-              <Input type="number" value={item.price} onChange={e => updateItem(i, 'price', e.target.value)} placeholder="0" />
+            <Field label={i === 0 ? 'PRICE/UNIT (₦)' : ''} className="mb-0">
+              <Input
+                type="number"
+                value={item.price}
+                onChange={e => updateItem(i, 'price', e.target.value)}
+                placeholder="Auto-filled"
+              />
             </Field>
-            <button
-              onClick={() => removeItem(i)}
+            <button onClick={() => removeItem(i)}
               className="bg-red/10 border-none text-red w-9 h-10 rounded-lg text-base cursor-pointer hover:bg-red/20 transition-colors self-end"
             >×</button>
           </div>
@@ -205,17 +220,13 @@ export default function SaleForm() {
             { id: 'half', label: 'Half Credit' },
             { id: 'credit', label: 'Full Credit' },
           ] as { id: PaymentType; label: string }[]).map(p => (
-            <button
-              key={p.id}
-              onClick={() => setPaymentType(p.id)}
+            <button key={p.id} onClick={() => setPaymentType(p.id)}
               className={`flex-1 py-2.5 px-2 rounded-lg border text-sm transition-all cursor-pointer
                 ${paymentType === p.id
                   ? 'border-accent bg-accent/10 text-accent'
                   : 'border-border bg-transparent text-soft hover:border-soft'
                 }`}
-            >
-              {p.label}
-            </button>
+            >{p.label}</button>
           ))}
         </div>
 
@@ -232,15 +243,15 @@ export default function SaleForm() {
         )}
       </Card>
 
-      <Btn onClick={handleSubmit} size="lg" className="w-full">
-        Record Sale →
-      </Btn>
+      <Btn onClick={handleSubmit} size="lg" className="w-full">Record Sale →</Btn>
 
-      {/* Add Product Modal */}
       {showAddProduct && (
         <Modal title="Add New Product" onClose={() => setShowAddProduct(false)}>
           <Field label="PRODUCT NAME *">
             <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Amstel Malt" />
+          </Field>
+          <Field label="FIXED SELLING PRICE (₦) *">
+            <Input type="number" value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="e.g. 3500" />
           </Field>
           <Field label="CATEGORY *">
             <Select value={newCategory} onChange={e => setNewCategory(e.target.value)}>
