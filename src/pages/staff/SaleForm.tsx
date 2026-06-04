@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Btn, Card, Field, Input, Select } from '../../components/ui'
 import { useAppState } from '../../hooks/useAppState'
-import { fmt, today, nowTime, uid } from '../../lib/utils'
+import { fmt, today } from '../../lib/utils'
 import { PaymentType, SaleItem } from '../../types'
 
 interface SaleLineItem {

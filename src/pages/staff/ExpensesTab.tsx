@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Btn, Card, Field, Input, Tag, EmptyState } from '../../components/ui'
 import { useAppState } from '../../hooks/useAppState'
-import { fmt, today, nowTime } from '../../lib/utils'
+import { fmt, today } from '../../lib/utils'
 
 export default function ExpensesTab() {
   const { appState, setAppState } = useAppState()
