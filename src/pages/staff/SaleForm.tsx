@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Btn, Card, Field, Input, Select } from '../../components/ui'
+import { Btn, Card, Field, Input, Select, Modal, Divider } from '../../components/ui'
 import { useAppState } from '../../hooks/useAppState'
 import { fmt, today } from '../../lib/utils'
 import { PaymentType, SaleItem } from '../../types'
@@ -19,6 +19,18 @@ export default function SaleForm() {
   const [items, setItems] = useState<SaleLineItem[]>([{ productId: '', qty: 1, price: '' }])
   const [success, setSuccess] = useState(false)
 
+  // Add product modal
+  const [showAddProduct, setShowAddProduct] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newCategory, setNewCategory] = useState('')
+  const [newCustomCategory, setNewCustomCategory] = useState('')
+  const [newUnit, setNewUnit] = useState('Crate')
+  const [newMinStock, setNewMinStock] = useState('5')
+
+  const categories = ['Soda', 'Water', 'Juice', 'Energy', 'Beer', 'Wine', 'Spirit', 'Other',
+    ...Array.from(new Set(appState.products.map(p => p.category)))
+  ].filter((v, i, a) => a.indexOf(v) === i)
+
   const addItem = () => setItems([...items, { productId: '', qty: 1, price: '' }])
   const removeItem = (i: number) => setItems(items.filter((_, idx) => idx !== i))
   const updateItem = (i: number, field: keyof SaleLineItem, val: string | number) => {
@@ -33,6 +45,28 @@ export default function SaleForm() {
     paymentType === 'full' ? 0 :
     paymentType === 'half' ? subtotal - paid :
     subtotal
+
+  const handleAddProduct = () => {
+    const category = newCategory === 'Other' ? newCustomCategory : newCategory
+    if (!newName.trim() || !category) return alert('Enter product name and category')
+    const newProduct = {
+      id: Date.now(),
+      name: newName.trim(),
+      category,
+      unit_type: newUnit,
+      units_per_crate: 12,
+      cost_price: 0,
+      wholesale_price: 0,
+      retail_price: 0,
+      current_stock: 0,
+      minimum_stock: parseInt(newMinStock) || 5,
+      is_active: true,
+      created_at: new Date().toISOString(),
+    }
+    setAppState(prev => ({ ...prev, products: [...prev.products, newProduct] }))
+    setNewName(''); setNewCategory(''); setNewCustomCategory(''); setNewUnit('Crate'); setNewMinStock('5')
+    setShowAddProduct(false)
+  }
 
   const handleSubmit = () => {
     if (!customerName.trim()) return alert('Enter customer name')
@@ -105,7 +139,10 @@ export default function SaleForm() {
 
   return (
     <div className="max-w-2xl">
-      <div className="font-display font-bold text-2xl mb-6">Record a Sale</div>
+      <div className="flex justify-between items-center mb-6">
+        <div className="font-display font-bold text-2xl">Record a Sale</div>
+        <Btn variant="soft" size="sm" onClick={() => setShowAddProduct(true)}>+ Add Product</Btn>
+      </div>
 
       {success && (
         <div className="bg-accent/10 border border-accent/20 rounded-xl px-4 py-3 text-accent text-sm mb-5">
@@ -198,6 +235,46 @@ export default function SaleForm() {
       <Btn onClick={handleSubmit} size="lg" className="w-full">
         Record Sale →
       </Btn>
+
+      {/* Add Product Modal */}
+      {showAddProduct && (
+        <Modal title="Add New Product" onClose={() => setShowAddProduct(false)}>
+          <Field label="PRODUCT NAME *">
+            <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Amstel Malt" />
+          </Field>
+          <Field label="CATEGORY *">
+            <Select value={newCategory} onChange={e => setNewCategory(e.target.value)}>
+              <option value="">Select category</option>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </Select>
+          </Field>
+          {newCategory === 'Other' && (
+            <Field label="CUSTOM CATEGORY NAME">
+              <Input value={newCustomCategory} onChange={e => setNewCustomCategory(e.target.value)} placeholder="Enter category name" />
+            </Field>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="UNIT TYPE">
+              <Select value={newUnit} onChange={e => setNewUnit(e.target.value)}>
+                <option value="Crate">Crate</option>
+                <option value="Pack">Pack</option>
+                <option value="Carton">Carton</option>
+                <option value="Piece">Piece</option>
+                <option value="Bottle">Bottle</option>
+                <option value="Can">Can</option>
+              </Select>
+            </Field>
+            <Field label="MIN STOCK ALERT">
+              <Input type="number" value={newMinStock} onChange={e => setNewMinStock(e.target.value)} placeholder="5" />
+            </Field>
+          </div>
+          <Divider />
+          <div className="flex gap-3 justify-end">
+            <Btn variant="ghost" onClick={() => setShowAddProduct(false)}>Cancel</Btn>
+            <Btn onClick={handleAddProduct}>Add Product</Btn>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
