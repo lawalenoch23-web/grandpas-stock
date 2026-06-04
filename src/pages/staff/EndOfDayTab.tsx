@@ -6,7 +6,6 @@ import { fmt, today } from '../../lib/utils'
 export default function EndOfDayTab() {
   const { appState, setAppState } = useAppState()
   const [openingStock, setOpeningStock] = useState('')
-  const [supplyReceived, setSupplyReceived] = useState('')
   const [submitted, setSubmitted] = useState(false)
 
   const todaySales = appState.sales.filter(s => s.created_at.startsWith(today()))
@@ -15,10 +14,20 @@ export default function EndOfDayTab() {
   const totalExpenses = todayExpenses.reduce((s, e) => s + e.amount, 0)
   const totalOutstanding = todaySales.reduce((s, sale) => s + sale.outstanding, 0)
 
+  // Supply comes from manager's recorded purchases today
+  const todaySupply = appState.supplies
+    .filter(s => s.date === today())
+    .reduce((sum, s) => sum + s.items.reduce((a, i) => a + i.qty, 0), 0)
+
+  // Units sold today
+  const unitsSoldToday = todaySales.reduce(
+    (sum, sale) => sum + sale.items.reduce((a, i) => a + Number(i.qty), 0), 0
+  )
+
   const opening = parseFloat(openingStock) || 0
-  const supply = parseFloat(supplyReceived) || 0
-  const totalStock = opening + supply
-  const closingStock = appState.products.reduce((s, p) => s + p.current_stock, 0)
+  const totalStock = opening + todaySupply
+  // Closing = Opening + Supply - Units Sold
+  const closingStock = Math.max(0, totalStock - unitsSoldToday)
 
   const alreadySubmitted = appState.reports.find(r => r.date === today())
 
@@ -27,7 +36,7 @@ export default function EndOfDayTab() {
       id: Date.now(),
       date: today(),
       opening_stock: opening,
-      supply_received: supply,
+      supply_received: todaySupply,
       total_stock: totalStock,
       closing_stock: closingStock,
       total_sales_value: totalSalesValue,
@@ -51,32 +60,31 @@ export default function EndOfDayTab() {
 
       <Card className="mb-5">
         <div className="font-display font-semibold mb-4">Stock Summary</div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="OPENING STOCK (UNITS)">
-            <Input
-              type="number"
-              value={openingStock}
-              onChange={e => setOpeningStock(e.target.value)}
-              placeholder="Enter opening stock"
-            />
-          </Field>
-          <Field label="SUPPLY RECEIVED TODAY">
-            <Input
-              type="number"
-              value={supplyReceived}
-              onChange={e => setSupplyReceived(e.target.value)}
-              placeholder="From manager"
-            />
-          </Field>
-        </div>
-        <div className="grid grid-cols-2 gap-2.5 mt-2">
+
+        <Field label="OPENING STOCK (UNITS) — what you counted this morning">
+          <Input
+            type="number"
+            value={openingStock}
+            onChange={e => setOpeningStock(e.target.value)}
+            placeholder="e.g. 120"
+          />
+        </Field>
+
+        <div className="grid grid-cols-3 gap-2.5 mt-2">
+          <div className="bg-bg rounded-lg p-3.5">
+            <div className="text-[10px] text-muted font-mono uppercase tracking-wider mb-1">Supply In</div>
+            <div className="text-2xl font-display font-bold text-accent">{todaySupply}</div>
+            <div className="text-[10px] text-muted mt-1">from manager</div>
+          </div>
           <div className="bg-bg rounded-lg p-3.5">
             <div className="text-[10px] text-muted font-mono uppercase tracking-wider mb-1">Total Stock</div>
-            <div className="text-2xl font-display font-bold text-accent">{totalStock}</div>
+            <div className="text-2xl font-display font-bold">{totalStock}</div>
+            <div className="text-[10px] text-muted mt-1">opening + supply</div>
           </div>
           <div className="bg-bg rounded-lg p-3.5">
             <div className="text-[10px] text-muted font-mono uppercase tracking-wider mb-1">Closing Stock</div>
-            <div className="text-2xl font-display font-bold">{closingStock}</div>
+            <div className="text-2xl font-display font-bold text-yellow">{closingStock}</div>
+            <div className="text-[10px] text-muted mt-1">total − sold</div>
           </div>
         </div>
       </Card>
