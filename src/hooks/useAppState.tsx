@@ -1,6 +1,24 @@
 import { createContext, useContext, useState, ReactNode } from 'react'
 import { Product, Sale, Expense, DailyReport, OutstandingBalance } from '../types'
 
+export interface SupplyItem {
+  product_id: number
+  product_name: string
+  qty: number
+  unit: string
+  price_per_unit: number
+  total_cost: number
+}
+
+export interface SupplyPurchase {
+  id: number
+  supplier_name: string
+  items: SupplyItem[]
+  total_cost: number
+  date: string
+  created_at: string
+}
+
 const PRODUCTS_SEED: Product[] = [
   { id: 1, name: 'Coca Cola', category: 'Soda', unit_type: 'Crate', units_per_crate: 12, cost_price: 2800, wholesale_price: 3200, retail_price: 3500, current_stock: 40, minimum_stock: 10, is_active: true, created_at: new Date().toISOString() },
   { id: 2, name: 'Pepsi', category: 'Soda', unit_type: 'Crate', units_per_crate: 12, cost_price: 2600, wholesale_price: 3000, retail_price: 3300, current_stock: 25, minimum_stock: 8, is_active: true, created_at: new Date().toISOString() },
@@ -18,6 +36,7 @@ export interface AppState {
   expenses: Expense[]
   reports: DailyReport[]
   outstandingBalances: OutstandingBalance[]
+  supplies: SupplyPurchase[]
 }
 
 interface AppStateContextType {
@@ -34,6 +53,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     expenses: [],
     reports: [],
     outstandingBalances: [],
+    supplies: [],
   })
 
   return (
