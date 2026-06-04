@@ -12,6 +12,7 @@ export interface SupplyItem {
 
 export interface SupplyPurchase {
   id: number
+  invoice_no: string
   supplier_name: string
   items: SupplyItem[]
   total_cost: number
