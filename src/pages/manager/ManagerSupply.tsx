@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Btn, Card, Field, Input, Select, Modal, Divider, EmptyState, Tag } from '../../components/ui'
 import { useAppState, SupplyItem } from '../../hooks/useAppState'
 import { fmt, today } from '../../lib/utils'
+import * as db from '../../lib/db'
 
 interface SupplyLineItem {
   productId: string
@@ -12,11 +13,12 @@ interface SupplyLineItem {
 type FilterPeriod = 'all' | 'today' | 'week' | 'month'
 
 export default function ManagerSupply() {
-  const { appState, setAppState } = useAppState()
+  const { appState, refresh } = useAppState()
   const [showForm, setShowForm] = useState(false)
   const [supplierName, setSupplierName] = useState('')
   const [invoiceNo, setInvoiceNo] = useState('')
   const [items, setItems] = useState<SupplyLineItem[]>([{ productId: '', qty: 1, pricePerUnit: '' }])
+  const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<FilterPeriod>('all')
@@ -24,55 +26,51 @@ export default function ManagerSupply() {
   const addItem = () => setItems([...items, { productId: '', qty: 1, pricePerUnit: '' }])
   const removeItem = (i: number) => setItems(items.filter((_, idx) => idx !== i))
   const updateItem = (i: number, field: keyof SupplyLineItem, val: string | number) => {
-    const updated = [...items]
-    updated[i] = { ...updated[i], [field]: val }
-    setItems(updated)
+    const updated = [...items]; updated[i] = { ...updated[i], [field]: val }; setItems(updated)
   }
 
-  const totalCost = items.reduce(
-    (sum, it) => sum + (parseFloat(it.pricePerUnit) || 0) * (it.qty || 0), 0
-  )
+  const totalCost = items.reduce((sum, it) => sum + (parseFloat(it.pricePerUnit) || 0) * (it.qty || 0), 0)
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!supplierName.trim()) return alert('Enter supplier name')
     const validItems = items.filter(it => it.productId && it.qty > 0)
     if (!validItems.length) return alert('Add at least one item')
+    setSaving(true)
+    try {
+      const supplyItems: SupplyItem[] = validItems.map(it => {
+        const product = appState.products.find(p => p.id === parseInt(it.productId))
+        return {
+          product_id: parseInt(it.productId),
+          product_name: product?.name || '',
+          qty: it.qty, unit: product?.unit_type || '',
+          price_per_unit: parseFloat(it.pricePerUnit) || 0,
+          total_cost: (parseFloat(it.pricePerUnit) || 0) * it.qty,
+        }
+      })
 
-    const supplyItems: SupplyItem[] = validItems.map(it => {
-      const product = appState.products.find(p => p.id === parseInt(it.productId))
-      return {
-        product_id: parseInt(it.productId),
-        product_name: product?.name || '',
-        qty: it.qty,
-        unit: product?.unit_type || '',
-        price_per_unit: parseFloat(it.pricePerUnit) || 0,
-        total_cost: (parseFloat(it.pricePerUnit) || 0) * it.qty,
-      }
-    })
-
-    const updatedProducts = appState.products.map(p => {
-      const item = validItems.find(it => parseInt(it.productId) === p.id)
-      if (item) return { ...p, current_stock: p.current_stock + item.qty }
-      return p
-    })
-
-    setAppState(prev => ({
-      ...prev,
-      products: updatedProducts,
-      supplies: [...prev.supplies, {
-        id: Date.now(),
+      await db.addSupply({
         invoice_no: invoiceNo.trim() || `INV-${Date.now().toString().slice(-6)}`,
         supplier_name: supplierName,
         items: supplyItems,
         total_cost: totalCost,
         date: today(),
-        created_at: new Date().toISOString(),
-      }],
-    }))
+      })
 
-    setSupplierName(''); setInvoiceNo(''); setItems([{ productId: '', qty: 1, pricePerUnit: '' }])
-    setSuccess(true); setShowForm(false)
-    setTimeout(() => setSuccess(false), 3000)
+      await Promise.all(validItems.map(it => {
+        const prod = appState.products.find(p => p.id === parseInt(it.productId))
+        if (!prod) return Promise.resolve()
+        return db.updateProduct(prod.id, { current_stock: prod.current_stock + it.qty })
+      }))
+
+      await refresh()
+      setSupplierName(''); setInvoiceNo(''); setItems([{ productId: '', qty: 1, pricePerUnit: '' }])
+      setSuccess(true); setShowForm(false)
+      setTimeout(() => setSuccess(false), 3000)
+    } catch (err) {
+      alert('Failed to record supply')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const filterStart = () => {
@@ -85,11 +83,7 @@ export default function ManagerSupply() {
 
   const filtered = [...appState.supplies]
     .filter(s => s.date >= filterStart())
-    .filter(s =>
-      search === '' ||
-      s.invoice_no.toLowerCase().includes(search.toLowerCase()) ||
-      s.supplier_name.toLowerCase().includes(search.toLowerCase())
-    )
+    .filter(s => search === '' || s.invoice_no.toLowerCase().includes(search.toLowerCase()) || s.supplier_name.toLowerCase().includes(search.toLowerCase()))
     .reverse()
 
   const todayTotal = appState.supplies.filter(s => s.date === today()).reduce((sum, s) => sum + s.total_cost, 0)
@@ -114,14 +108,9 @@ export default function ManagerSupply() {
         </div>
       )}
 
-      {/* Search + Filter */}
       <div className="flex gap-3 mb-5">
-        <Input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search by invoice no. or supplier..."
-          className="flex-1"
-        />
+        <Input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Search by invoice no. or supplier..." className="flex-1" />
         <div className="flex gap-1.5">
           {(['all', 'today', 'week', 'month'] as FilterPeriod[]).map(f => (
             <button key={f} onClick={() => setFilter(f)}
@@ -155,7 +144,7 @@ export default function ManagerSupply() {
                 </tr>
               </thead>
               <tbody>
-                {s.items.map((item, i) => (
+                {s.items.map((item: any, i: number) => (
                   <tr key={i} className="border-b border-border/10">
                     <td className="px-2 py-2 text-sm">{item.product_name}</td>
                     <td className="px-2 py-2 text-sm font-mono">{item.qty} {item.unit}</td>
@@ -179,22 +168,17 @@ export default function ManagerSupply() {
               <Input value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)} placeholder="e.g. INV-00123" />
             </Field>
           </div>
-
           <Divider />
-
           <div className="flex justify-between items-center mb-3">
             <div className="text-sm font-semibold">Items Purchased</div>
             <Btn variant="soft" size="sm" onClick={addItem}>+ Add Item</Btn>
           </div>
-
           {items.map((item, i) => (
             <div key={i} className="grid gap-2.5 mb-2.5 items-end" style={{ gridTemplateColumns: '1fr 80px 130px 36px' }}>
               <Field label={i === 0 ? 'PRODUCT' : ''} className="mb-0">
                 <Select value={item.productId} onChange={e => updateItem(i, 'productId', e.target.value)}>
                   <option value="">Select product</option>
-                  {appState.products.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
+                  {appState.products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </Select>
               </Field>
               <Field label={i === 0 ? 'QTY' : ''} className="mb-0">
@@ -204,19 +188,16 @@ export default function ManagerSupply() {
                 <Input type="number" value={item.pricePerUnit} onChange={e => updateItem(i, 'pricePerUnit', e.target.value)} placeholder="0" />
               </Field>
               <button onClick={() => removeItem(i)}
-                className="bg-red/10 border-none text-red w-9 h-10 rounded-lg text-base cursor-pointer hover:bg-red/20 self-end"
-              >×</button>
+                className="bg-red/10 border-none text-red w-9 h-10 rounded-lg text-base cursor-pointer hover:bg-red/20 self-end">×</button>
             </div>
           ))}
-
           <div className="bg-bg rounded-lg px-4 py-3 flex justify-between font-mono mt-3 mb-5">
             <span className="text-muted">TOTAL COST</span>
             <span className="text-yellow font-medium">{fmt(totalCost)}</span>
           </div>
-
           <div className="flex gap-3 justify-end">
             <Btn variant="ghost" onClick={() => setShowForm(false)}>Cancel</Btn>
-            <Btn onClick={handleSubmit}>Record Purchase →</Btn>
+            <Btn onClick={handleSubmit} disabled={saving}>{saving ? 'Saving...' : 'Record Purchase →'}</Btn>
           </div>
         </Modal>
       )}

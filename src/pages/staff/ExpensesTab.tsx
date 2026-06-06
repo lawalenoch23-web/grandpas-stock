@@ -2,57 +2,54 @@ import { useState } from 'react'
 import { Btn, Card, Field, Input, Tag, EmptyState } from '../../components/ui'
 import { useAppState } from '../../hooks/useAppState'
 import { fmt, today } from '../../lib/utils'
+import * as db from '../../lib/db'
 
 export default function ExpensesTab() {
-  const { appState, setAppState } = useAppState()
+  const { appState, refresh } = useAppState()
   const [desc, setDesc] = useState('')
   const [amount, setAmount] = useState('')
+  const [saving, setSaving] = useState(false)
 
   const todayExpenses = appState.expenses.filter(e => e.date === today())
   const total = todayExpenses.reduce((s, e) => s + e.amount, 0)
 
-  const addExpense = () => {
+  const addExpense = async () => {
     if (!desc.trim() || !amount) return
-    setAppState(prev => ({
-      ...prev,
-      expenses: [...prev.expenses, {
-        id: Date.now(),
+    setSaving(true)
+    try {
+      await db.addExpense({
         description: desc,
         amount: parseFloat(amount),
         date: today(),
-        created_at: new Date().toISOString(),
-      }],
-    }))
-    setDesc('')
-    setAmount('')
+        logged_by: 'Staff',
+      })
+      await refresh()
+      setDesc(''); setAmount('')
+    } catch (err) {
+      alert('Failed to save expense')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
     <div className="max-w-lg">
       <div className="font-display font-bold text-2xl mb-6">Expenses</div>
-
       <Card className="mb-5">
         <div className="font-display font-semibold mb-4">Log Expense</div>
         <div className="grid gap-3" style={{ gridTemplateColumns: '1fr 140px' }}>
           <Field label="DESCRIPTION">
-            <Input
-              value={desc}
-              onChange={e => setDesc(e.target.value)}
-              placeholder="e.g. Delivery fare"
-              onKeyDown={e => e.key === 'Enter' && addExpense()}
-            />
+            <Input value={desc} onChange={e => setDesc(e.target.value)} placeholder="e.g. Delivery fare"
+              onKeyDown={e => e.key === 'Enter' && addExpense()} />
           </Field>
           <Field label="AMOUNT (₦)">
-            <Input
-              type="number"
-              value={amount}
-              onChange={e => setAmount(e.target.value)}
-              placeholder="0"
-              onKeyDown={e => e.key === 'Enter' && addExpense()}
-            />
+            <Input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0"
+              onKeyDown={e => e.key === 'Enter' && addExpense()} />
           </Field>
         </div>
-        <Btn onClick={addExpense} className="mt-1">Add Expense</Btn>
+        <Btn onClick={addExpense} className="mt-1" disabled={saving}>
+          {saving ? 'Saving...' : 'Add Expense'}
+        </Btn>
       </Card>
 
       <Card>
@@ -60,7 +57,6 @@ export default function ExpensesTab() {
           <div className="font-display font-semibold">Today's Expenses</div>
           <Tag color="yellow">{fmt(total)}</Tag>
         </div>
-
         {todayExpenses.length === 0
           ? <EmptyState icon="🧾" text="No expenses logged today" />
           : todayExpenses.map(e => (
