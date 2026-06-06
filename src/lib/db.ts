@@ -168,3 +168,43 @@ export const addSupply = async (supply: Omit<SupplyPurchase, 'id' | 'created_at'
     created_at: data.created_at,
   } as SupplyPurchase
 }
+
+// ── RESET (testing only — remove before production) ───────────────────────────
+export const resetAllData = async () => {
+  await supabase.from('outstanding_balances').delete().neq('id', 0)
+  await supabase.from('sales').delete().neq('id', 0)
+  await supabase.from('expenses').delete().neq('id', 0)
+  await supabase.from('daily_reports').delete().neq('id', 0)
+  await supabase.from('purchases').delete().neq('id', 0)
+  await supabase.from('stock_adjustments').delete().neq('id', 0)
+  // Reset all product stock to 0
+  await supabase.from('products').update({ current_stock: 0 }).neq('id', 0)
+}
+
+// ── INITIAL STOCK SETUP ───────────────────────────────────────────────────────
+export const setInitialStock = async (stockMap: Record<number, number>) => {
+  await Promise.all(
+    Object.entries(stockMap).map(([id, qty]) =>
+      supabase.from('products').update({ current_stock: qty }).eq('id', parseInt(id))
+    )
+  )
+  // Save as a day-0 report so opening stock chain starts correctly
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayStr = yesterday.toISOString().split('T')[0]
+  const totalStock = Object.values(stockMap).reduce((a, b) => a + b, 0)
+
+  // Delete any existing day-0 report first
+  await supabase.from('daily_reports').delete().eq('date', yesterdayStr)
+
+  await supabase.from('daily_reports').insert({
+    date: yesterdayStr,
+    opening_stock: 0,
+    supply_received: totalStock,
+    total_stock: totalStock,
+    closing_stock: totalStock,
+    total_sales_value: 0,
+    total_expenses: 0,
+    submitted_by: 'Manager (Initial Setup)',
+  })
+}

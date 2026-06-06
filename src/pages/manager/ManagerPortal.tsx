@@ -7,15 +7,17 @@ import OutstandingBalances from './OutstandingBalances'
 import ManagerExpenses from './ManagerExpenses'
 import ManagerSupply from './ManagerSupply'
 import ManagerFinancials from './ManagerFinancials'
+import ManagerSettings from './ManagerSettings'
 
 const TABS = [
-  { id: 'overview', label: 'Overview', icon: '📊' },
-  { id: 'financials', label: 'Financials', icon: '💹' },
-  { id: 'supply', label: 'Supply', icon: '🚚' },
-  { id: 'reports', label: 'Daily Reports', icon: '📋' },
-  { id: 'sales', label: 'All Sales', icon: '💰' },
-  { id: 'outstanding', label: 'Outstanding', icon: '⏳' },
-  { id: 'expenses', label: 'Expenses', icon: '🧾' },
+  { id: 'overview',    label: 'Overview',  icon: '📊' },
+  { id: 'financials',  label: 'Financials', icon: '💹' },
+  { id: 'supply',      label: 'Supply',     icon: '🚚' },
+  { id: 'reports',     label: 'Reports',    icon: '📋' },
+  { id: 'sales',       label: 'Sales',      icon: '💰' },
+  { id: 'outstanding', label: 'Owed',       icon: '⏳' },
+  { id: 'expenses',    label: 'Expenses',   icon: '🧾' },
+  { id: 'settings',   label: 'Settings',   icon: '⚙️' },
 ]
 
 interface ManagerPortalProps {
@@ -29,7 +31,7 @@ export default function ManagerPortal({ onLogout }: ManagerPortalProps) {
     <div className="min-h-screen flex flex-col">
       <TopBar role="manager" onLogout={onLogout} />
       <TabBar tabs={TABS} active={tab} onChange={setTab} accentColor="text-yellow border-yellow" />
-      <div className="flex-1 p-6 overflow-y-auto">
+      <div className="flex-1 p-4 md:p-6 overflow-y-auto">
         {tab === 'overview'    && <ManagerOverview />}
         {tab === 'financials'  && <ManagerFinancials />}
         {tab === 'supply'      && <ManagerSupply />}
@@ -37,6 +39,7 @@ export default function ManagerPortal({ onLogout }: ManagerPortalProps) {
         {tab === 'sales'       && <ManagerSales />}
         {tab === 'outstanding' && <OutstandingBalances />}
         {tab === 'expenses'    && <ManagerExpenses />}
+        {tab === 'settings'    && <ManagerSettings />}
       </div>
     </div>
   )
