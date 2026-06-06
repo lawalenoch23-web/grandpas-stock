@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Btn, Card, Field, Input, Divider, EmptyState } from '../../components/ui'
+import { Btn, Card, Input, EmptyState } from '../../components/ui'
 import { useAppState } from '../../hooks/useAppState'
 import * as db from '../../lib/db'
 
