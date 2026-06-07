@@ -188,19 +188,19 @@ export const setInitialStock = async (stockMap: Record<number, number>) => {
       supabase.from('products').update({ current_stock: qty }).eq('id', parseInt(id))
     )
   )
-  // Save as a day-0 report so opening stock chain starts correctly
-  const yesterday = new Date()
-  yesterday.setDate(yesterday.getDate() - 1)
-  const yesterdayStr = yesterday.toISOString().split('T')[0]
-  const totalStock = Object.values(stockMap).reduce((a, b) => a + b, 0)
+  const totalStock = Object.values(stockMap).reduce((a: number, b: number) => a + b, 0)
 
-  // Delete any existing day-0 report first
-  await supabase.from('daily_reports').delete().eq('date', yesterdayStr)
+  // Save baseline report dated TODAY with closing stock = the stock entered
+  // Tomorrow morning this becomes the opening stock automatically
+  const todayStr = new Date().toISOString().split('T')[0]
+
+  // Delete any existing report for today first
+  await supabase.from('daily_reports').delete().eq('date', todayStr)
 
   await supabase.from('daily_reports').insert({
-    date: yesterdayStr,
-    opening_stock: 0,
-    supply_received: totalStock,
+    date: todayStr,
+    opening_stock: totalStock,
+    supply_received: 0,
     total_stock: totalStock,
     closing_stock: totalStock,
     total_sales_value: 0,
