@@ -118,7 +118,7 @@ export const getReports = async () => {
 export const addReport = async (report: Omit<DailyReport, 'id' | 'created_at'>) => {
   const { data, error } = await supabase
     .from('daily_reports')
-    .insert(report)
+    .upsert(report, { onConflict: 'date' })
     .select()
     .single()
   if (error) throw error
