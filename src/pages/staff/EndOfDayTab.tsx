@@ -14,23 +14,41 @@ export default function EndOfDayTab() {
   const totalExpenses = todayExpenses.reduce((s, e) => s + e.amount, 0)
   const totalOutstanding = todaySales.reduce((s, sale) => s + sale.outstanding, 0)
 
+  // Supply received today from manager
   const todaySupplyUnits = appState.supplies
     .filter(s => s.date === today())
-    .reduce((sum, s) => sum + s.items.reduce((a, i) => a + i.qty, 0), 0)
+    .reduce((sum, s) => sum + s.items.reduce((a: number, i: any) => a + i.qty, 0), 0)
 
+  // Opening stock = closing stock from yesterday's report
   const yesterday = new Date()
   yesterday.setDate(yesterday.getDate() - 1)
   const yesterdayStr = yesterday.toISOString().split('T')[0]
   const yesterdayReport = appState.reports.find(r => r.date === yesterdayStr)
-  const openingStock = yesterdayReport ? yesterdayReport.closing_stock : 0
 
+  // Also check today's report (in case initial setup was done today)
+  const todayReport = appState.reports.find(r => r.date === today())
+  const alreadySubmitted = todayReport && todayReport.submitted_by !== 'Manager (Initial Setup)'
+
+  // Opening stock: yesterday closing → or today's initial setup closing → or 0
+  const openingStock = yesterdayReport
+    ? yesterdayReport.closing_stock
+    : todayReport
+      ? todayReport.closing_stock
+      : 0
+
+  const openingLabel = yesterdayReport
+    ? `from ${yesterdayStr}`
+    : todayReport
+      ? 'from initial setup'
+      : 'no baseline set'
+
+  // Units sold today
   const unitsSoldToday = todaySales.reduce(
     (sum, sale) => sum + sale.items.reduce((a: number, i: any) => a + Number(i.qty), 0), 0
   )
 
   const totalStock = openingStock + todaySupplyUnits
   const closingStock = Math.max(0, totalStock - unitsSoldToday)
-  const alreadySubmitted = appState.reports.find(r => r.date === today())
 
   const handleSubmit = async () => {
     setSaving(true)
@@ -46,7 +64,7 @@ export default function EndOfDayTab() {
         submitted_by: 'Staff',
       })
       await refresh()
-    } catch (err) {
+    } catch {
       alert('Failed to submit report. Please try again.')
     } finally {
       setSaving(false)
@@ -63,15 +81,19 @@ export default function EndOfDayTab() {
         </div>
       )}
 
+      {!yesterdayReport && !todayReport && (
+        <div className="bg-yellow/10 border border-yellow/20 rounded-xl px-4 py-3 text-yellow text-sm mb-5">
+          ⚠️ No stock baseline set yet. Ask manager to set initial stock in Settings.
+        </div>
+      )}
+
       <Card className="mb-5">
         <div className="font-display font-semibold mb-4">Stock Summary</div>
         <div className="grid grid-cols-2 gap-2.5">
           <div className="bg-bg rounded-lg p-3.5">
             <div className="text-[10px] text-muted font-mono uppercase tracking-wider mb-1">Opening Stock</div>
             <div className="text-2xl font-display font-bold">{openingStock}</div>
-            <div className="text-[10px] text-muted mt-1">
-              {yesterdayReport ? `from ${yesterdayStr}` : 'no prior report'}
-            </div>
+            <div className="text-[10px] text-muted mt-1">{openingLabel}</div>
           </div>
           <div className="bg-bg rounded-lg p-3.5">
             <div className="text-[10px] text-muted font-mono uppercase tracking-wider mb-1">Supply In</div>
@@ -98,7 +120,12 @@ export default function EndOfDayTab() {
         <StatCard label="OUTSTANDING" value={fmt(totalOutstanding)} accent="text-red" />
       </div>
 
-      <Btn onClick={handleSubmit} size="lg" className="w-full" disabled={!!(saving || alreadySubmitted)}>
+      <Btn
+        onClick={handleSubmit}
+        size="lg"
+        className="w-full"
+        disabled={!!(saving || alreadySubmitted)}
+      >
         {saving ? 'Submitting...' : 'Submit Report to Manager →'}
       </Btn>
     </div>
