@@ -171,14 +171,14 @@ export const addSupply = async (supply: Omit<SupplyPurchase, 'id' | 'created_at'
 
 // ── RESET (testing only — remove before production) ───────────────────────────
 export const resetAllData = async () => {
-  await supabase.from('outstanding_balances').delete().neq('id', 0)
-  await supabase.from('sales').delete().neq('id', 0)
-  await supabase.from('expenses').delete().neq('id', 0)
-  await supabase.from('daily_reports').delete().neq('id', 0)
-  await supabase.from('purchases').delete().neq('id', 0)
-  await supabase.from('stock_adjustments').delete().neq('id', 0)
+  await supabase.from('outstanding_balances').delete().gte('id', 0)
+  await supabase.from('sales').delete().gte('id', 0)
+  await supabase.from('expenses').delete().gte('id', 0)
+  await supabase.from('daily_reports').delete().gte('id', 0)
+  await supabase.from('purchases').delete().gte('id', 0)
+  await supabase.from('stock_adjustments').delete().gte('id', 0)
   // Reset all product stock to 0
-  await supabase.from('products').update({ current_stock: 0 }).neq('id', 0)
+  await supabase.from('products').update({ current_stock: 0 }).gte('id', 0)
 }
 
 // ── INITIAL STOCK SETUP ───────────────────────────────────────────────────────
