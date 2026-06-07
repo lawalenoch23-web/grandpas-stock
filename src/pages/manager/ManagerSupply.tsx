@@ -8,6 +8,7 @@ interface SupplyLineItem {
   productId: string
   qty: number
   pricePerUnit: string
+  sellingPrice: string
 }
 
 type FilterPeriod = 'all' | 'today' | 'week' | 'month'
@@ -17,16 +18,23 @@ export default function ManagerSupply() {
   const [showForm, setShowForm] = useState(false)
   const [supplierName, setSupplierName] = useState('')
   const [invoiceNo, setInvoiceNo] = useState('')
-  const [items, setItems] = useState<SupplyLineItem[]>([{ productId: '', qty: 1, pricePerUnit: '' }])
+  const [items, setItems] = useState<SupplyLineItem[]>([{ productId: '', qty: 1, pricePerUnit: '', sellingPrice: '' }])
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<FilterPeriod>('all')
 
-  const addItem = () => setItems([...items, { productId: '', qty: 1, pricePerUnit: '' }])
+  const addItem = () => setItems([...items, { productId: '', qty: 1, pricePerUnit: '', sellingPrice: '' }])
   const removeItem = (i: number) => setItems(items.filter((_, idx) => idx !== i))
   const updateItem = (i: number, field: keyof SupplyLineItem, val: string | number) => {
-    const updated = [...items]; updated[i] = { ...updated[i], [field]: val }; setItems(updated)
+    const updated = [...items]
+    updated[i] = { ...updated[i], [field]: val }
+    // Auto-fill selling price from product's current retail price
+    if (field === 'productId') {
+      const prod = appState.products.find(p => p.id === parseInt(val as string))
+      if (prod && prod.retail_price > 0) updated[i].sellingPrice = prod.retail_price.toString()
+    }
+    setItems(updated)
   }
 
   const totalCost = items.reduce((sum, it) => sum + (parseFloat(it.pricePerUnit) || 0) * (it.qty || 0), 0)
@@ -42,7 +50,8 @@ export default function ManagerSupply() {
         return {
           product_id: parseInt(it.productId),
           product_name: product?.name || '',
-          qty: it.qty, unit: product?.unit_type || '',
+          qty: it.qty,
+          unit: product?.unit_type || '',
           price_per_unit: parseFloat(it.pricePerUnit) || 0,
           total_cost: (parseFloat(it.pricePerUnit) || 0) * it.qty,
         }
@@ -56,17 +65,23 @@ export default function ManagerSupply() {
         date: today(),
       })
 
+      // Update stock + selling price per product
       await Promise.all(validItems.map(it => {
         const prod = appState.products.find(p => p.id === parseInt(it.productId))
         if (!prod) return Promise.resolve()
-        return db.updateProduct(prod.id, { current_stock: prod.current_stock + it.qty })
+        const updates: any = { current_stock: prod.current_stock + it.qty }
+        if (it.sellingPrice && parseFloat(it.sellingPrice) > 0) {
+          updates.retail_price = parseFloat(it.sellingPrice)
+        }
+        return db.updateProduct(prod.id, updates)
       }))
 
       await refresh()
-      setSupplierName(''); setInvoiceNo(''); setItems([{ productId: '', qty: 1, pricePerUnit: '' }])
+      setSupplierName(''); setInvoiceNo('')
+      setItems([{ productId: '', qty: 1, pricePerUnit: '', sellingPrice: '' }])
       setSuccess(true); setShowForm(false)
       setTimeout(() => setSuccess(false), 3000)
-    } catch (err) {
+    } catch {
       alert('Failed to record supply')
     } finally {
       setSaving(false)
@@ -83,7 +98,9 @@ export default function ManagerSupply() {
 
   const filtered = [...appState.supplies]
     .filter(s => s.date >= filterStart())
-    .filter(s => search === '' || s.invoice_no.toLowerCase().includes(search.toLowerCase()) || s.supplier_name.toLowerCase().includes(search.toLowerCase()))
+    .filter(s => search === '' ||
+      s.invoice_no.toLowerCase().includes(search.toLowerCase()) ||
+      s.supplier_name.toLowerCase().includes(search.toLowerCase()))
     .reverse()
 
   const todayTotal = appState.supplies.filter(s => s.date === today()).reduce((sum, s) => sum + s.total_cost, 0)
@@ -97,7 +114,7 @@ export default function ManagerSupply() {
 
       {success && (
         <div className="bg-accent/10 border border-accent/20 rounded-xl px-4 py-3 text-accent text-sm mb-5">
-          ✅ Supply recorded and stock updated!
+          ✅ Supply recorded, stock and prices updated!
         </div>
       )}
 
@@ -138,7 +155,7 @@ export default function ManagerSupply() {
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b border-border">
-                  {['Product', 'Qty', 'Unit Price', 'Total'].map(h => (
+                  {['Product', 'Qty', 'Cost/Unit', 'Total'].map(h => (
                     <th key={h} className="text-left px-2 py-1.5 text-[10px] text-muted font-mono uppercase">{h}</th>
                   ))}
                 </tr>
@@ -173,25 +190,41 @@ export default function ManagerSupply() {
             <div className="text-sm font-semibold">Items Purchased</div>
             <Btn variant="soft" size="sm" onClick={addItem}>+ Add Item</Btn>
           </div>
+
           {items.map((item, i) => (
-            <div key={i} className="grid gap-2.5 mb-2.5 items-end" style={{ gridTemplateColumns: '1fr 80px 130px 36px' }}>
-              <Field label={i === 0 ? 'PRODUCT' : ''} className="mb-0">
-                <Select value={item.productId} onChange={e => updateItem(i, 'productId', e.target.value)}>
-                  <option value="">Select product</option>
-                  {appState.products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </Select>
-              </Field>
-              <Field label={i === 0 ? 'QTY' : ''} className="mb-0">
-                <Input type="number" min={1} value={item.qty} onChange={e => updateItem(i, 'qty', parseInt(e.target.value))} />
-              </Field>
-              <Field label={i === 0 ? 'PRICE/UNIT (₦)' : ''} className="mb-0">
-                <Input type="number" value={item.pricePerUnit} onChange={e => updateItem(i, 'pricePerUnit', e.target.value)} placeholder="0" />
-              </Field>
-              <button onClick={() => removeItem(i)}
-                className="bg-red/10 border-none text-red w-9 h-10 rounded-lg text-base cursor-pointer hover:bg-red/20 self-end">×</button>
+            <div key={i} className="mb-4 p-3 bg-bg rounded-xl border border-border">
+              <div className="grid gap-2.5 mb-2.5" style={{ gridTemplateColumns: '1fr 80px 36px' }}>
+                <Field label="PRODUCT" className="mb-0">
+                  <Select value={item.productId} onChange={e => updateItem(i, 'productId', e.target.value)}>
+                    <option value="">Select product</option>
+                    {appState.products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </Select>
+                </Field>
+                <Field label="QTY" className="mb-0">
+                  <Input type="number" min={1} value={item.qty} onChange={e => updateItem(i, 'qty', parseInt(e.target.value))} />
+                </Field>
+                <button onClick={() => removeItem(i)}
+                  className="bg-red/10 border-none text-red w-9 h-10 rounded-lg text-base cursor-pointer hover:bg-red/20 self-end">×</button>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <Field label="COST PRICE/UNIT (₦)" className="mb-0">
+                  <Input type="number" value={item.pricePerUnit}
+                    onChange={e => updateItem(i, 'pricePerUnit', e.target.value)} placeholder="What you paid" />
+                </Field>
+                <Field label="SELLING PRICE/UNIT (₦)" className="mb-0">
+                  <Input type="number" value={item.sellingPrice}
+                    onChange={e => updateItem(i, 'sellingPrice', e.target.value)} placeholder="Auto-filled from product" />
+                </Field>
+              </div>
+              {item.sellingPrice && (
+                <div className="text-xs text-accent mt-1.5 font-mono">
+                  This will update the product's selling price to {fmt(parseFloat(item.sellingPrice) || 0)}
+                </div>
+              )}
             </div>
           ))}
-          <div className="bg-bg rounded-lg px-4 py-3 flex justify-between font-mono mt-3 mb-5">
+
+          <div className="bg-surface rounded-lg px-4 py-3 flex justify-between font-mono mt-3 mb-5">
             <span className="text-muted">TOTAL COST</span>
             <span className="text-yellow font-medium">{fmt(totalCost)}</span>
           </div>

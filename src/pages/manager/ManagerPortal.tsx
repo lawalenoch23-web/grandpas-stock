@@ -8,11 +8,13 @@ import ManagerExpenses from './ManagerExpenses'
 import ManagerSupply from './ManagerSupply'
 import ManagerFinancials from './ManagerFinancials'
 import ManagerSettings from './ManagerSettings'
+import ManageProducts from './ManageProducts'
 
 const TABS = [
-  { id: 'overview',    label: 'Overview',  icon: '📊' },
+  { id: 'overview',    label: 'Overview',   icon: '📊' },
   { id: 'financials',  label: 'Financials', icon: '💹' },
   { id: 'supply',      label: 'Supply',     icon: '🚚' },
+  { id: 'products',    label: 'Products',   icon: '📦' },
   { id: 'reports',     label: 'Reports',    icon: '📋' },
   { id: 'sales',       label: 'Sales',      icon: '💰' },
   { id: 'outstanding', label: 'Owed',       icon: '⏳' },
@@ -35,6 +37,7 @@ export default function ManagerPortal({ onLogout }: ManagerPortalProps) {
         {tab === 'overview'    && <ManagerOverview />}
         {tab === 'financials'  && <ManagerFinancials />}
         {tab === 'supply'      && <ManagerSupply />}
+        {tab === 'products'    && <ManageProducts />}
         {tab === 'reports'     && <ManagerReports />}
         {tab === 'sales'       && <ManagerSales />}
         {tab === 'outstanding' && <OutstandingBalances />}
