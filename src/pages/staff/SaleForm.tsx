@@ -20,6 +20,7 @@ export default function SaleForm() {
   const [items, setItems] = useState<SaleLineItem[]>([{ productId: '', qty: 1, price: '' }])
   const [success, setSuccess] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [errors, setErrors] = useState<string[]>([])
 
   const [showAddProduct, setShowAddProduct] = useState(false)
   const [newName, setNewName] = useState('')
@@ -66,15 +67,30 @@ export default function SaleForm() {
       setNewName(''); setNewCategory(''); setNewCustomCategory('')
       setNewUnit('Crate'); setNewMinStock('5'); setNewPrice('')
       setShowAddProduct(false)
-    } catch (err) {
+    } catch {
       alert('Failed to add product')
     }
   }
 
   const handleSubmit = async () => {
-    if (!customerName.trim()) return alert('Enter customer name')
+    setErrors([])
+    if (!customerName.trim()) return setErrors(['Enter customer name'])
     const validItems = items.filter(it => it.productId && it.qty > 0 && it.price)
-    if (!validItems.length) return alert('Add at least one product')
+    if (!validItems.length) return setErrors(['Add at least one product'])
+
+    // Check stock availability
+    const stockErrors: string[] = []
+    validItems.forEach(it => {
+      const prod = appState.products.find(p => p.id === parseInt(it.productId))
+      if (!prod) return
+      if (prod.current_stock <= 0) {
+        stockErrors.push(`${prod.name} is out of stock`)
+      } else if (it.qty > prod.current_stock) {
+        stockErrors.push(`${prod.name}: only ${prod.current_stock} ${prod.unit_type}(s) available`)
+      }
+    })
+    if (stockErrors.length) return setErrors(stockErrors)
+
     setSaving(true)
     try {
       const saleItems: SaleItem[] = validItems.map(it => ({
@@ -107,16 +123,12 @@ export default function SaleForm() {
         staff_name: 'Staff',
       })
 
-      // Update stock levels
       await Promise.all(validItems.map(it => {
         const prod = appState.products.find(p => p.id === parseInt(it.productId))
         if (!prod) return Promise.resolve()
-        return db.updateProduct(prod.id, {
-          current_stock: Math.max(0, prod.current_stock - it.qty)
-        })
+        return db.updateProduct(prod.id, { current_stock: Math.max(0, prod.current_stock - it.qty) })
       }))
 
-      // Add outstanding balance if needed
       if (outstandingAmt > 0) {
         await db.addOutstandingBalance({
           sale_id: sale.id,
@@ -134,8 +146,8 @@ export default function SaleForm() {
       setCustomerName(''); setCustomerPhone(''); setPaymentType('full')
       setAmountPaid(''); setItems([{ productId: '', qty: 1, price: '' }])
       setTimeout(() => setSuccess(false), 3000)
-    } catch (err) {
-      alert('Failed to record sale. Please try again.')
+    } catch {
+      setErrors(['Failed to record sale. Please try again.'])
     } finally {
       setSaving(false)
     }
@@ -156,6 +168,12 @@ export default function SaleForm() {
         </div>
       )}
 
+      {errors.length > 0 && (
+        <div className="bg-red/10 border border-red/20 rounded-xl px-4 py-3 text-red text-sm mb-5 space-y-1">
+          {errors.map((e, i) => <div key={i}>⚠️ {e}</div>)}
+        </div>
+      )}
+
       <Card className="mb-5">
         <div className="font-display font-semibold mb-4">Customer Info</div>
         <div className="grid grid-cols-2 gap-3.5">
@@ -173,27 +191,35 @@ export default function SaleForm() {
           <div className="font-display font-semibold">Items</div>
           <Btn variant="soft" size="sm" onClick={addItem}>+ Add Item</Btn>
         </div>
-        {items.map((item, i) => (
-          <div key={i} className="grid gap-2.5 mb-2.5 items-end" style={{ gridTemplateColumns: '1fr 80px 140px 36px' }}>
-            <Field label={i === 0 ? 'PRODUCT' : ''} className="mb-0">
-              <Select value={item.productId} onChange={e => updateItem(i, 'productId', e.target.value)}>
-                <option value="">Select product</option>
-                {appState.products.map(p => (
-                  <option key={p.id} value={p.id}>{p.name} ({p.current_stock} left)</option>
-                ))}
-              </Select>
-            </Field>
-            <Field label={i === 0 ? 'QTY' : ''} className="mb-0">
-              <Input type="number" min={1} value={item.qty} onChange={e => updateItem(i, 'qty', parseInt(e.target.value))} />
-            </Field>
-            <Field label={i === 0 ? 'PRICE/UNIT (₦)' : ''} className="mb-0">
-              <Input type="number" value={item.price} onChange={e => updateItem(i, 'price', e.target.value)} placeholder="Auto-filled" />
-            </Field>
-            <button onClick={() => removeItem(i)}
-              className="bg-red/10 border-none text-red w-9 h-10 rounded-lg text-base cursor-pointer hover:bg-red/20 transition-colors self-end"
-            >×</button>
-          </div>
-        ))}
+        {items.map((item, i) => {
+          const prod = appState.products.find(p => p.id === parseInt(item.productId))
+          const outOfStock = prod && prod.current_stock <= 0
+          return (
+            <div key={i} className="grid gap-2.5 mb-2.5 items-end" style={{ gridTemplateColumns: '1fr 80px 140px 36px' }}>
+              <Field label={i === 0 ? 'PRODUCT' : ''} className="mb-0">
+                <Select value={item.productId} onChange={e => updateItem(i, 'productId', e.target.value)}>
+                  <option value="">Select product</option>
+                  {appState.products.map(p => (
+                    <option key={p.id} value={p.id} disabled={p.current_stock <= 0}>
+                      {p.name} {p.current_stock <= 0 ? '(out of stock)' : `(${p.current_stock} left)`}
+                    </option>
+                  ))}
+                </Select>
+                {outOfStock && <div className="text-red text-xs mt-1">Out of stock</div>}
+              </Field>
+              <Field label={i === 0 ? 'QTY' : ''} className="mb-0">
+                <Input type="number" min={1} max={prod?.current_stock || undefined}
+                  value={item.qty} onChange={e => updateItem(i, 'qty', parseInt(e.target.value))} />
+              </Field>
+              <Field label={i === 0 ? 'PRICE/UNIT (₦)' : ''} className="mb-0">
+                <Input type="number" value={item.price}
+                  onChange={e => updateItem(i, 'price', e.target.value)} placeholder="Auto-filled" />
+              </Field>
+              <button onClick={() => removeItem(i)}
+                className="bg-red/10 border-none text-red w-9 h-10 rounded-lg text-base cursor-pointer hover:bg-red/20 transition-colors self-end">×</button>
+            </div>
+          )
+        })}
         <div className="bg-bg rounded-lg px-4 py-3 flex justify-between font-mono mt-2">
           <span className="text-muted">SUBTOTAL</span>
           <span className="text-accent font-medium">{fmt(subtotal)}</span>
@@ -235,8 +261,8 @@ export default function SaleForm() {
           <Field label="PRODUCT NAME *">
             <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Amstel Malt" />
           </Field>
-          <Field label="FIXED SELLING PRICE (₦) *">
-            <Input type="number" value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="e.g. 3500" />
+          <Field label="FIXED SELLING PRICE (₦)">
+            <Input type="number" value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="Manager will set this" />
           </Field>
           <Field label="CATEGORY *">
             <Select value={newCategory} onChange={e => setNewCategory(e.target.value)}>
